@@ -413,6 +413,8 @@ enum ActorFlag8
 	MF8_STOPRAILS		= 0x00000200,	// [MC] Prevent rails from going further if an actor has this flag.
 	MF8_ABSVIEWANGLES	= 0x00000400,	// [MC] By default view angle/pitch/roll is an offset. This will make it absolute instead.
 	MF8_FALLDAMAGE		= 0x00000800,	// Monster will take fall damage regardless of map settings.
+	MF8_MINVISIBLE		= 0x00001000,	// Actor not visible to monsters
+	MF8_MVISBLOCKED		= 0x00002000,	// Monster(only) sight checks to actor always fail
 	MF8_ALLOWTHRUBITS	= 0x00008000,	// [MC] Enable ThruBits property
 	MF8_FULLVOLSEE		= 0x00010000,	// Play see sound at full volume
 	MF8_E1M8BOSS		= 0x00020000,	// MBF21 boss death.
@@ -923,9 +925,13 @@ public:
 	void SetPitch(DAngle p, int fflags);
 	void SetAngle(DAngle ang, int fflags);
 	void SetRoll(DAngle roll, int fflags);
+
+	// These also set CF_INTERPVIEWANGLES for players.
 	void SetViewPitch(DAngle p, int fflags);
 	void SetViewAngle(DAngle ang, int fflags);
 	void SetViewRoll(DAngle roll, int fflags);
+
+	double GetFOV(double ticFrac);
 
 	PClassActor *GetBloodType(int type = 0) const;
 
@@ -996,6 +1002,7 @@ public:
 	DVector3 Vec3Angle(double length, DAngle angle, double dz, bool absolute = false);
 
 	void ClearInterpolation();
+	void ClearFOVInterpolation();
 
 	void Move(const DVector3 &vel)
 	{
@@ -1231,15 +1238,15 @@ public:
 	uint32_t BloodTranslation;
 
 	// [RH] Stuff that used to be part of an Actor Info
-	FSoundIDNoInit SeeSound;
-	FSoundIDNoInit AttackSound;
-	FSoundIDNoInit PainSound;
-	FSoundIDNoInit DeathSound;
-	FSoundIDNoInit ActiveSound;
-	FSoundIDNoInit UseSound;		// [RH] Sound to play when an actor is used.
-	FSoundIDNoInit BounceSound;
-	FSoundIDNoInit WallBounceSound;
-	FSoundIDNoInit CrushPainSound;
+	FSoundID SeeSound;
+	FSoundID AttackSound;
+	FSoundID PainSound;
+	FSoundID DeathSound;
+	FSoundID ActiveSound;
+	FSoundID UseSound;		// [RH] Sound to play when an actor is used.
+	FSoundID BounceSound;
+	FSoundID WallBounceSound;
+	FSoundID CrushPainSound;
 
 	double MaxDropOffHeight;
 	double MaxStepHeight;
@@ -1276,6 +1283,7 @@ public:
 	// [RH] Used to interpolate the view to get >35 FPS
 	DVector3 Prev;
 	DRotator PrevAngles;
+	DAngle   PrevFOV;
 	int PrevPortalGroup;
 	TArray<FDynamicLight *> AttachedLights;
 	TDeletingArray<FLightDefaults *> UserLights;

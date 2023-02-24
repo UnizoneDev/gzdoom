@@ -67,7 +67,8 @@ const float LARGE_VALUE = 1e19f;
 
 EXTERN_CVAR(Bool, r_debug_disable_vis_filter)
 EXTERN_CVAR(Float, transsouls)
-
+EXTERN_CVAR(Float, r_actorspriteshadowalpha)
+EXTERN_CVAR(Float, r_actorspriteshadowfadeheight)
 
 //==========================================================================
 //
@@ -382,7 +383,7 @@ bool HWSprite::CalculateVertices(HWDrawInfo *di, FVector3 *v, DVector3 *vp)
 	}
 	
 	// [BB] Billboard stuff
-	const bool drawWithXYBillboard = ((particle && gl_billboard_particles) || (!(actor && actor->renderflags & RF_FORCEYBILLBOARD)
+	const bool drawWithXYBillboard = ((particle && gl_billboard_particles && !(particle->flags & PT_NOXYBILLBOARD)) || (!(actor && actor->renderflags & RF_FORCEYBILLBOARD)
 		//&& di->mViewActor != nullptr
 		&& (gl_billboard_mode == 1 || (actor && actor->renderflags & RF_FORCEXYBILLBOARD))));
 
@@ -390,7 +391,7 @@ bool HWSprite::CalculateVertices(HWDrawInfo *di, FVector3 *v, DVector3 *vp)
 	// [Nash] has +ROLLSPRITE
 	const bool drawRollSpriteActor = (actor != nullptr && actor->renderflags & RF_ROLLSPRITE);
 
-	const bool drawRollParticle = (particle != nullptr && particle->doRoll);
+	const bool drawRollParticle = (particle != nullptr && particle->flags & PT_DOROLL);
 
 
 	// [fgsfds] check sprite type mask
@@ -402,7 +403,7 @@ bool HWSprite::CalculateVertices(HWDrawInfo *di, FVector3 *v, DVector3 *vp)
 	const bool useOffsets = (actor != nullptr) && !(actor->renderflags & RF_ROLLCENTER);
 
 	// [Nash] check for special sprite drawing modes
-	if (drawWithXYBillboard || drawBillboardFacingCamera || drawRollSpriteActor || isFlatSprite)
+	if (drawWithXYBillboard || drawBillboardFacingCamera || drawRollSpriteActor || drawRollParticle || isFlatSprite)
 	{
 		// Compute center of sprite
 		float xcenter = (x1 + x2)*0.5;
@@ -1174,7 +1175,12 @@ void HWSprite::Process(HWDrawInfo *di, AActor* thing, sector_t * sector, area_t 
 	{
 		RenderStyle = STYLE_Stencil;
 		ThingColor = MAKEARGB(255, 0, 0, 0);
-		trans *= 0.5f;
+		// fade shadow progressively as the thing moves higher away from the floor
+		if (r_actorspriteshadowfadeheight > 0.0) {
+			trans *= clamp(0.0f, float(r_actorspriteshadowalpha - (thingpos.Z - thing->floorz) * (1.0 / r_actorspriteshadowfadeheight)), float(r_actorspriteshadowalpha));
+		} else {
+			trans *= r_actorspriteshadowalpha;
+		}
 		hw_styleflags = STYLEHW_NoAlphaTest;
 	}
 
@@ -1343,7 +1349,7 @@ void HWSprite::ProcessParticle (HWDrawInfo *di, particle_t *particle, sector_t *
 	y = float(particle->Pos.Y) + yvf;
 	z = float(particle->Pos.Z) + zvf;
 
-	if(particle->doRoll)
+	if(particle->flags & PT_DOROLL)
 	{
 		float rvf = (particle->RollVel) * timefrac;
 		Angles.Roll = TAngle<double>::fromDeg(particle->Roll + rvf);

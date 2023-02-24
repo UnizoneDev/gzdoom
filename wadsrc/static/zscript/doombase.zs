@@ -299,7 +299,7 @@ struct TraceResults native
 class LineTracer : Object native
 {
 	native @TraceResults Results;
-	native bool Trace(vector3 start, Sector sec, vector3 direction, double maxDist, ETraceFlags traceFlags);
+	native bool Trace(vector3 start, Sector sec, vector3 direction, double maxDist, ETraceFlags traceFlags, /* Line::ELineFlags */ uint wallMask = 0xFFFFFFFF, bool ignoreAllActors = false, Actor ignore = null);
 
 	virtual ETraceStatus TraceCallback()
 	{
@@ -369,6 +369,29 @@ struct LevelInfo native
 	native static String MapChecksum(String mapname);
 }
 
+struct FSpawnParticleParams
+{
+	native Color color1;
+	native TextureID texture;
+	native int style;
+	native int flags;
+	native int lifetime;
+
+	native double size;
+	native double sizestep;
+
+	native Vector3 pos;
+	native Vector3 vel;
+	native Vector3 accel;
+	
+	native double startalpha;
+	native double fadestep;
+
+	native double startroll;
+	native double rollvel;
+	native double rollacc;
+};
+
 struct LevelLocals native
 {
 	enum EUDMF
@@ -386,6 +409,7 @@ struct LevelLocals native
 	native Array<@Line> Lines;
 	native Array<@Side> Sides;
 	native readonly Array<@Vertex> Vertexes;
+	native readonly Array<@LinePortal> LinePortals;
 	native internal Array<@SectorPortal> SectorPortals;
 	
 	native readonly int time;
@@ -491,6 +515,11 @@ struct LevelLocals native
 	native clearscope vector2 Vec2Offset(vector2 pos, vector2 dir, bool absolute = false) const;
 	native clearscope vector3 Vec2OffsetZ(vector2 pos, vector2 dir, double atz, bool absolute = false) const;
 	native clearscope vector3 Vec3Offset(vector3 pos, vector3 dir, bool absolute = false) const;
+	native clearscope Vector2 GetDisplacement(int pg1, int pg2) const;
+	native clearscope int GetPortalGroupCount() const;
+	native clearscope int PointOnLineSide(Vector2 pos, Line l, bool precise = false) const;
+	native clearscope int ActorOnLineSide(Actor mo, Line l) const;
+	native clearscope int BoxOnLineSide(Vector2 pos, double radius, Line l) const;
 
 	native String GetChecksum() const;
 
@@ -515,6 +544,8 @@ struct LevelLocals native
 
 	native String GetClusterName();
 	native String GetEpisodeName();
+
+	native void SpawnParticle(FSpawnParticleParams p);
 }
 
 // a few values of this need to be readable by the play code.
@@ -754,4 +785,3 @@ struct FRailParams
 	native int SpiralOffset;
 	native int limit;
 };	// [RH] Shoot a railgun
-

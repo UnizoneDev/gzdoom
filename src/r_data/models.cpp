@@ -134,18 +134,29 @@ void RenderModel(FModelRenderer *renderer, float x, float y, float z, FSpriteMod
 	// [Nash] take SpriteRotation into account
 	angle += actor->SpriteRotation.Degrees();
 
+	// consider the pixel stretching. For non-voxels this must be factored out here
+	float stretch = 1.f;
+
+	// [MK] distortions might happen depending on when the pixel stretch is compensated for
+	// so we make the "undistorted" behavior opt-in
+	if (smf->flags & MDL_CORRECTPIXELSTRETCH)
+	{
+		stretch = (smf->modelIDs[0] != -1 ? Models[smf->modelIDs[0]]->getAspectFactor(actor->Level->info->pixelstretch) : 1.f) / actor->Level->info->pixelstretch;
+		objectToWorldMatrix.scale(1, stretch, 1);
+	}
+
 	// Applying model transformations:
 	// 1) Applying actor angle, pitch and roll to the model
 	if (smf->flags & MDL_USEROTATIONCENTER)
 	{
-		objectToWorldMatrix.translate(smf->rotationCenterX, smf->rotationCenterZ, smf->rotationCenterY);
+		objectToWorldMatrix.translate(smf->rotationCenterX, smf->rotationCenterZ/stretch, smf->rotationCenterY);
 	}
 	objectToWorldMatrix.rotate(-angle, 0, 1, 0);
 	objectToWorldMatrix.rotate(pitch, 0, 0, 1);
 	objectToWorldMatrix.rotate(-roll, 1, 0, 0);
 	if (smf->flags & MDL_USEROTATIONCENTER)
 	{
-		objectToWorldMatrix.translate(-smf->rotationCenterX, -smf->rotationCenterZ, -smf->rotationCenterY);
+		objectToWorldMatrix.translate(-smf->rotationCenterX, -smf->rotationCenterZ/stretch, -smf->rotationCenterY);
 	}
 
 	// 2) Applying Doomsday like rotation of the weapon pickup models
@@ -153,25 +164,27 @@ void RenderModel(FModelRenderer *renderer, float x, float y, float z, FSpriteMod
 
 	if (smf->flags & MDL_ROTATING)
 	{
-		objectToWorldMatrix.translate(smf->rotationCenterX, smf->rotationCenterY, smf->rotationCenterZ);
+		objectToWorldMatrix.translate(smf->rotationCenterX, smf->rotationCenterY/stretch, smf->rotationCenterZ);
 		objectToWorldMatrix.rotate(rotateOffset, smf->xrotate, smf->yrotate, smf->zrotate);
-		objectToWorldMatrix.translate(-smf->rotationCenterX, -smf->rotationCenterY, -smf->rotationCenterZ);
+		objectToWorldMatrix.translate(-smf->rotationCenterX, -smf->rotationCenterY/stretch, -smf->rotationCenterZ);
 	}
 
 	// 3) Scaling model.
 	objectToWorldMatrix.scale(scaleFactorX, scaleFactorZ, scaleFactorY);
 
 	// 4) Aplying model offsets (model offsets do not depend on model scalings).
-	objectToWorldMatrix.translate(smf->xoffset / smf->xscale, smf->zoffset / smf->zscale, smf->yoffset / smf->yscale);
+	objectToWorldMatrix.translate(smf->xoffset / smf->xscale, smf->zoffset / (smf->zscale*stretch), smf->yoffset / smf->yscale);
 
 	// 5) Applying model rotations.
 	objectToWorldMatrix.rotate(-smf->angleoffset, 0, 1, 0);
 	objectToWorldMatrix.rotate(smf->pitchoffset, 0, 0, 1);
 	objectToWorldMatrix.rotate(-smf->rolloffset, 1, 0, 0);
 
-	// consider the pixel stretching. For non-voxels this must be factored out here
-	float stretch = (smf->modelIDs[0] != -1 ? Models[smf->modelIDs[0]]->getAspectFactor(actor->Level->info->pixelstretch) : 1.f) / actor->Level->info->pixelstretch;
-	objectToWorldMatrix.scale(1, stretch, 1);
+	if (!(smf->flags & MDL_CORRECTPIXELSTRETCH))
+	{
+		stretch = (smf->modelIDs[0] != -1 ? Models[smf->modelIDs[0]]->getAspectFactor(actor->Level->info->pixelstretch) : 1.f) / actor->Level->info->pixelstretch;
+		objectToWorldMatrix.scale(1, stretch, 1);
+	}
 
 	float orientation = scaleFactorX * scaleFactorY * scaleFactorZ;
 
@@ -180,10 +193,9 @@ void RenderModel(FModelRenderer *renderer, float x, float y, float z, FSpriteMod
 	renderer->EndDrawModel(actor->RenderStyle, smf);
 }
 
-void RenderHUDModel(FModelRenderer *renderer, DPSprite *psp, float ofsX, float ofsY)
+void RenderHUDModel(FModelRenderer *renderer, DPSprite *psp, FVector3 translation, FVector3 rotation, FVector3 rotation_pivot, FSpriteModelFrame *smf)
 {
 	AActor * playermo = players[consoleplayer].camera;
-	FSpriteModelFrame *smf = psp->Caller != nullptr ? FindModelFrame(psp->Caller->modelData != nullptr ? psp->Caller->modelData->modelDef != NAME_None ? PClass::FindActor(psp->Caller->modelData->modelDef) : psp->Caller->GetClass() : psp->Caller->GetClass(), psp->GetSprite(), psp->GetFrame(), false) : nullptr;
 
 	// [BB] No model found for this sprite, so we can't render anything.
 	if (smf == nullptr)
@@ -208,8 +220,19 @@ void RenderHUDModel(FModelRenderer *renderer, DPSprite *psp, float ofsX, float o
 	objectToWorldMatrix.translate(smf->xoffset / smf->xscale, smf->zoffset / smf->zscale, smf->yoffset / smf->yscale);
 
 	// [BB] Weapon bob, very similar to the normal Doom weapon bob.
-	objectToWorldMatrix.rotate(ofsX / 4, 0, 1, 0);
-	objectToWorldMatrix.rotate((ofsY - WEAPONTOP) / -4., 1, 0, 0);
+
+	
+
+	objectToWorldMatrix.translate(rotation_pivot.X, rotation_pivot.Y, rotation_pivot.Z);
+	
+	objectToWorldMatrix.rotate(rotation.X, 0, 1, 0);
+	objectToWorldMatrix.rotate(rotation.Y, 1, 0, 0);
+	objectToWorldMatrix.rotate(rotation.Z, 0, 0, 1);
+
+	objectToWorldMatrix.translate(-rotation_pivot.X, -rotation_pivot.Y, -rotation_pivot.Z);
+	
+	objectToWorldMatrix.translate(translation.X, translation.Y, translation.Z);
+	
 
 	// [BB] For some reason the jDoom models need to be rotated.
 	objectToWorldMatrix.rotate(90.f, 0, 1, 0);
@@ -291,7 +314,7 @@ void RenderFrameModels(FModelRenderer *renderer, FLevelLocals *Level, const FSpr
 	bool evaluatedSingle = false;
 
 	for (int i = 0; i < modelsamount; i++)
-	{	
+	{
 		int modelid = -1;
 		int animationid = -1;
 		int modelframe = -1;
@@ -352,7 +375,6 @@ void RenderFrameModels(FModelRenderer *renderer, FLevelLocals *Level, const FSpr
 			auto& ssids = surfaceskinids.Size() > 0 ? surfaceskinids : smf->surfaceskinIDs;
 			auto ssidp = (unsigned)(i * MD3_MAX_SURFACES) < ssids.Size() ? &ssids[i * MD3_MAX_SURFACES] : nullptr;
 
-			const TArray<TRS>* animationData = nullptr;
 
 			bool nextFrame = smfNext && modelframe != modelframenext;
 
@@ -368,11 +390,11 @@ void RenderFrameModels(FModelRenderer *renderer, FLevelLocals *Level, const FSpr
 			if (animationid >= 0)
 			{
 				FModel* animation = Models[animationid];
-				animationData = animation->AttachAnimationData();
+				const TArray<TRS>* animationData = animation->AttachAnimationData();
 
 				if (!(smf->flags & MDL_MODELSAREATTACHMENTS) || evaluatedSingle == false)
 				{
-					boneData = animation->CalculateBones(modelframe, nextFrame ? modelframenext : modelframe, nextFrame ? inter : 0.f, *animationData, actor->boneComponentData, i);
+					boneData = animation->CalculateBones(modelframe, nextFrame ? modelframenext : modelframe, nextFrame ? inter : 0.f, animationData, actor->boneComponentData, i);
 					boneStartingPosition = renderer->SetupFrame(animation, 0, 0, 0, boneData, -1);
 					evaluatedSingle = true;
 				}
@@ -381,7 +403,7 @@ void RenderFrameModels(FModelRenderer *renderer, FLevelLocals *Level, const FSpr
 			{
 				if (!(smf->flags & MDL_MODELSAREATTACHMENTS) || evaluatedSingle == false)
 				{
-					boneData = mdl->CalculateBones(modelframe, nextFrame ? modelframenext : modelframe, nextFrame ? inter : 0.f, *animationData, actor->boneComponentData, i);
+					boneData = mdl->CalculateBones(modelframe, nextFrame ? modelframenext : modelframe, nextFrame ? inter : 0.f, nullptr, actor->boneComponentData, i);
 					boneStartingPosition = renderer->SetupFrame(mdl, 0, 0, 0, boneData, -1);
 					evaluatedSingle = true;
 				}
@@ -808,6 +830,10 @@ static void ParseModelDefLump(int Lump)
 						if (smf.modelIDs[index] != -1)
 						{
 							FModel *model = Models[smf.modelIDs[index]];
+							if (smf.animationIDs[index] != -1)
+							{
+								model = Models[smf.animationIDs[index]];
+							}
 							smf.modelframes[index] = model->FindFrame(sc.String);
 							if (smf.modelframes[index]==-1) sc.ScriptError("Unknown frame '%s' in %s", sc.String, type->TypeName.GetChars());
 						}
@@ -845,6 +871,10 @@ static void ParseModelDefLump(int Lump)
 					smf.rotationCenterX = 0.;
 					smf.rotationCenterY = 0.;
 					smf.rotationCenterZ = 0.;
+				}
+				else if (sc.Compare("correctpixelstretch"))
+				{
+					smf.flags |= MDL_CORRECTPIXELSTRETCH;
 				}
 				else
 				{
